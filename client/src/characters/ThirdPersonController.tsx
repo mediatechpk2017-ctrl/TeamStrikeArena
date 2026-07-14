@@ -1,7 +1,7 @@
+import RAPIER from '@dimforge/rapier3d-compat'
 import React, { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Vector3 } from 'three'
-import RAPIER from 'rapier3d-compat'
 import { usePhysics } from '../physics/PhysicsProvider'
 import useInput from '../hooks/useInput'
 import { getSocket } from '../network/socket'
@@ -26,7 +26,7 @@ export default function ThirdPersonController({ roomId, playerName }: { roomId: 
   const { camera } = useThree()
   const physics = usePhysics()
   const input = useInput()
-  const bodyRef = useRef<any | null>(null)
+  const bodyRef = useRef<RAPIER.RigidBody | null>(null)
   const idRef = useRef<string>(uuidv4())
   const position = useRef(new Vector3(0, 1.1, 0))
   const velocity = useRef(new Vector3(0, 0, 0))
@@ -47,27 +47,22 @@ export default function ThirdPersonController({ roomId, playerName }: { roomId: 
       if(!physics || !physics.world) return
       const world = physics.world
       const rb = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0,1.1,0))
-      const collider = world.createCollider(RAPIER.ColliderDesc.capsule(0.6, 0.4), rb)
+      world.createCollider(RAPIER.ColliderDesc.capsule(0.6, 0.4), rb)
       bodyRef.current = rb
     })()
     return () => { mounted = false }
   }, [physics])
 
   useEffect(() => {
-    socket.on('server_snapshot', (snap: { players: Record<string, PlayerState>, lastProcessedInput: Record<string, number> }) => {
+    socket.on('server_snapshot', (snap: { players: Record<string, PlayerState> }) => {
       const serverPlayer = snap.players[idRef.current]
       if(!serverPlayer) return
       if(!bodyRef.current) return
       const authoritativePos = new Vector3(serverPlayer.position[0], serverPlayer.position[1], serverPlayer.position[2])
       const serverSeq = serverPlayer.lastProcessedInput || 0
-      // reconcile
-      const localPos = position.current.clone()
-      const dist = localPos.distanceTo(authoritativePos)
       position.current.copy(authoritativePos)
       bodyRef.current.setNextKinematicTranslation({ x: authoritativePos.x, y: authoritativePos.y, z: authoritativePos.z })
-      // remove acknowledged inputs
       while(unconfirmedInputs.current.length && unconfirmedInputs.current[0].seq <= serverSeq) unconfirmedInputs.current.shift()
-      // reapply remaining inputs locally
       unconfirmedInputs.current.forEach((inputItem) => {
         applyInputLocally(inputItem.input, inputItem.dt)
       })
@@ -86,11 +81,9 @@ export default function ThirdPersonController({ roomId, playerName }: { roomId: 
     const dir = new Vector3()
     dir.x = -Math.sin(yaw.current) * forward + Math.cos(yaw.current) * right
     dir.z = -Math.cos(yaw.current) * forward - Math.sin(yaw.current) * right
-    dir.normalize()
-    if(!isNaN(dir.x) && !isNaN(dir.z)){
-      velocity.current.x = dir.x * speed
-      velocity.current.z = dir.z * speed
-    }
+    if(dir.lengthSq() > 0) dir.normalize()
+    velocity.current.x = dir.x * speed
+    velocity.current.z = dir.z * speed
     if(inputState.jump && Math.abs(position.current.y - 1.1) < 0.05){
       velocity.current.y = JUMP_SPEED
     }
@@ -116,7 +109,6 @@ export default function ThirdPersonController({ roomId, playerName }: { roomId: 
     unconfirmedInputs.current.push({ seq, input: command, dt: delta })
     applyInputLocally(command, delta)
     socket.emit('input_command', { roomId, id: idRef.current, input: command, seq })
-    // camera follow
     const camOffset = new Vector3(0, 2.2, 5)
     const camTarget = position.current.clone()
     const cameraPos = position.current.clone().add(camOffset.applyAxisAngle(new Vector3(0,1,0), yaw.current))

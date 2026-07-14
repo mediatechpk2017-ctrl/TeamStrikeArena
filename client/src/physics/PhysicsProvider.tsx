@@ -1,18 +1,18 @@
-import React, { createContext, useContext, useEffect, useRef } from 'react'
-import RAPIER from 'rapier3d-compat'
+import React, { useEffect, useRef } from 'react'
+import RAPIER from '@dimforge/rapier3d-compat'
 
 type PhysicsContextValue = {
-  world: any | null
+  world: RAPIER.World | null
 }
 
-const PhysicsContext = createContext<PhysicsContextValue>({ world: null })
+const PhysicsContext = React.createContext<PhysicsContextValue>({ world: null })
 
 export function usePhysics(){
-  return useContext(PhysicsContext)
+  return React.useContext(PhysicsContext)
 }
 
 export default function PhysicsProvider({ children }: { children: React.ReactNode }){
-  const worldRef = useRef<any | null>(null)
+  const worldRef = useRef<RAPIER.World | null>(null)
   const last = useRef<number | null>(null)
 
   useEffect(() => {
