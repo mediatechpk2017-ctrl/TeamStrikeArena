@@ -1,0 +1,8 @@
+{
+  "name": "teams-trike-arena-root",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ]
+}
